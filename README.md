@@ -26,10 +26,4 @@ But : **sauter les obstacles (dromadaires 🐪, tempêtes de sable 🌪️), col
 - Effets sonores légers  
 - Thème visuel basé sur les couleurs du **drapeau tchadien 🇹🇩**  
 
----
 
-## 🛠 Déploiement
-1. Crée un repo public sur GitHub.  
-2. Ajoute `index.html` à la racine.  
-3. Active **GitHub Pages** dans les paramètres.  
-4. Le jeu sera dispo à l’adresse :  
