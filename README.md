@@ -3,11 +3,6 @@
 Mini-jeu web inspiré du Sahel et du Tchad.  
 But : **sauter les obstacles (dromadaires 🐪, tempêtes de sable 🌪️), collecter les calebasses 🏺 et battre ton record !**
 
----
-
-## Jouer en ligne
-👉 [Clique ici pour jouer sur GitHub Pages](https://AArc02.github.io/savana-runner-tchad/)  
-
 
 ---
 
