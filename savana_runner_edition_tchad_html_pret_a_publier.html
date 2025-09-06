@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Savana Runner — Édition Tchad</title>
+  <meta name="description" content="Un mini‑jeu web mobile sur le Tchad : saute les obstacles du Sahel, collecte des calebasses, et bats le record !" />
+  <meta property="og:title" content="Savana Runner — Édition Tchad" />
+  <meta property="og:description" content="Jeu web léger, jouable sur mobile. Touche pour sauter, esquive les dromadaires et les tempêtes de sable !" />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#092a87" />
+  <style>
+    :root{
+      --blue:#092a87; /* Bleu du drapeau tchadien */
+      --gold:#ffcd00; /* Jaune/or */
+      --red:#c8102e;  /* Rouge */
+      --sand:#e9d8a6;
+      --ink:#141414;
+    }
+    html,body{margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial, Noto Sans, sans-serif;background:linear-gradient(#fff, #f8f6ef);}    
+    header{display:flex;gap:.75rem;align-items:center;justify-content:space-between;padding:12px clamp(12px,3vw,24px);background:linear-gradient(90deg,var(--blue),var(--gold),var(--red));color:#fff}
+    header h1{font-size:clamp(18px,2.8vw,24px);margin:0;letter-spacing:.3px}
+    header .actions{display:flex;gap:.5rem;align-items:center}
+    button, .chip{
+      appearance:none;border:0;border-radius:14px;padding:8px 12px;cursor:pointer;font-weight:600
+    }
+    .btn{background:#fff;color:var(--ink);box-shadow:0 2px 0 rgba(0,0,0,.15)}
+    .btn:active{transform:translateY(1px)}
+    .chip{background:rgba(255,255,255,.2);color:#fff}
+
+    main{max-width:980px;margin:16px auto;padding:0 12px}
+    .panel{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.06);padding:12px}
+    .topbar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .stats{display:flex;gap:8px;flex-wrap:wrap}
+    .stat{background:var(--sand);border-radius:12px;padding:6px 10px;font-weight:700;color:#5a4b2e}
+
+    canvas{width:100%;height:auto;display:block;border-radius:12px;background:linear-gradient(#a8e4ff 55%, #f6e9b6 55%);/* ciel + sable */}
+    .hint{font-size:14px;color:#555;margin:10px 6px}
+    footer{max-width:980px;margin:10px auto 28px;opacity:.8;text-align:center;font-size:13px}
+    a{color:var(--blue);text-decoration:none}
+    a:hover{text-decoration:underline}
+
+    .flag{display:inline-flex;overflow:hidden;border-radius:4px;border:1px solid rgba(0,0,0,.12)}
+    .flag span{width:10px;height:14px;display:inline-block}
+    .flag .b{background:var(--blue)}
+    .flag .y{background:var(--gold)}
+    .flag .r{background:var(--red)}
+
+    .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;background:#111;color:#fff;padding:10px 14px;border-radius:12px;opacity:0;transition:.3s;pointer-events:none}
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🦌 Savana Runner — Édition Tchad <span class="flag" aria-hidden="true"><span class="b"></span><span class="y"></span><span class="r"></span></span></h1>
+    <div class="actions">
+      <button class="btn" id="shareBtn">Partager</button>
+      <button class="btn" id="howBtn">Règles</button>
+      <span class="chip" id="langChip" title="Changer de langue">FR</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="topbar">
+        <div class="stats">
+          <div class="stat">Score: <span id="score">0</span></div>
+          <div class="stat">Record: <span id="best">0</span></div>
+          <div class="stat">Vitesse: <span id="speed">1.0x</span></div>
+        </div>
+        <div>
+          <button class="btn" id="pauseBtn">⏸️ Pause</button>
+          <button class="btn" id="restartBtn">🔁 Rejouer</button>
+          <button class="btn" id="soundBtn" aria-pressed="true">🔊</button>
+        </div>
+      </div>
+      <canvas id="game" width="900" height="340" aria-label="Jeu Savana Runner"></canvas>
+      <p class="hint" id="hint">📱 Appuie / clique pour SAUTER • Évite les dromadaires et tempêtes de sable • Collecte les calebasses 🏺</p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <footer>
+    Fait avec ❤️ pour le Tchad. Code libre à publier où tu veux. Astuce: héberge sur GitHub Pages ou Netlify.
+  </footer>
+
+<script>
+(function(){
+  // --- i18n léger ---
+  const i18n = {
+    FR: {
+      hint: "📱 Appuie / clique pour SAUTER • Évite les dromadaires et tempêtes de sable • Collecte les calebasses 🏺",
+      paused: "Jeu en pause",
+      resumed: "C'est reparti !",
+      gameover: (score,best)=>`Fin de partie — Score: ${score} • Record: ${best}`,
+      rules: `
+🎮 Règles rapides\n\n
+— Touchez / Espace pour sauter.\n
+— Évitez: dromadaires 🐪 et tempêtes de sable 🌪️.\n
+— Collectez les calebasses 🏺 pour scorer.\n
+— La vitesse augmente progressivement.\n
+— Votre meilleur score est sauvegardé sur cet appareil.\n
+
+🇹🇩 Thème: Sahel, dunes du Sahara, lac Tchad, baobabs. Amusez‑vous !`
+    },
+    EN: {
+      hint: "📱 Tap / click to JUMP • Avoid camels and sandstorms • Collect gourds 🏺",
+      paused: "Game paused",
+      resumed: "Back in action!",
+      gameover: (s,b)=>`Game Over — Score: ${s} • Best: ${b}`,
+      rules: `
+🎮 Quick rules\n\n
+— Tap / Space to jump.\n
+— Avoid: camels 🐪 and sandstorms 🌪️.\n
+— Collect gourds 🏺 to score.\n
+— Speed increases over time.\n
+— Best score is saved on this device.\n
+
+🇹🇩 Theme: Sahel dunes, Lake Chad, baobabs. Have fun!`
+    }
+  }
+  let LANG = localStorage.getItem('sr_lang') || 'FR';
+
+  const $ = sel => document.querySelector(sel);
+  const toast = (msg)=>{ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1400); }
+
+  // --- Canvas setup ---
+  const canvas = $('#game');
+  const ctx = canvas.getContext('2d');
+  let W = canvas.width, H = canvas.height;
+  const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  function resize(){
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * DPR);
+    canvas.height = Math.floor(340 * DPR); // keep aspect
+    W = canvas.width; H = canvas.height;
+  }
+  resize();
+  addEventListener('resize', resize);
+
+  // --- Game state ---
+  const G = {
+    running:true,
+    time:0,
+    speed: 4, // base pixels/frame at DPR scale
+    gravity: 0.7 * DPR,
+    jump: 12 * DPR,
+    score:0,
+    best: Number(localStorage.getItem('sr_best')||0),
+    obstacles:[],
+    items:[],
+    ground: Math.floor(H*0.78),
+    themeShift:0
+  }
+
+  // --- Player ---
+  const player = {
+    x: Math.floor(W*0.12),
+    y: G.ground,
+    vy:0,
+    w: 36*DPR,
+    h: 42*DPR,
+    color:'#1b4332',
+    jumping:false,
+    halo:0
+  }
+  function doJump(){
+    if(!G.running){return}
+    if(player.y >= G.ground-1){
+      player.vy = -G.jump;
+      player.jumping = true;
+      sfxBeep(660, 0.06)
+    }
+  }
+
+  // --- Inputs ---
+  addEventListener('keydown', e=>{
+    if(e.code==='Space' || e.code==='ArrowUp') { e.preventDefault(); doJump(); }
+    if(e.code==='KeyP'){togglePause()}
+    if(e.code==='KeyR'){restart()}
+  }, {passive:false});
+  canvas.addEventListener('pointerdown', doJump);
+
+  // UI buttons
+  $('#pauseBtn').onclick = togglePause;
+  $('#restartBtn').onclick = restart;
+  $('#soundBtn').onclick = ()=>{ SOUND.enabled=!SOUND.enabled; $('#soundBtn').textContent = SOUND.enabled ? '🔊' : '🔈' }
+  $('#howBtn').onclick = ()=> alert(i18n[LANG].rules);
+  $('#shareBtn').onclick = share;
+  $('#langChip').onclick = ()=>{ LANG = LANG==='FR'?'EN':'FR'; localStorage.setItem('sr_lang', LANG); $('#langChip').textContent = LANG; $('#hint').textContent = i18n[LANG].hint; }
+
+  $('#hint').textContent = i18n[LANG].hint;
+  $('#best').textContent = G.best;
+
+  function togglePause(){
+    G.running = !G.running;
+    toast(G.running? i18n[LANG].resumed : i18n[LANG].paused);
+    if(G.running) loop();
+  }
+  function restart(){
+    G.score=0; G.speed=4; G.obstacles.length=0; G.items.length=0; player.y=G.ground; player.vy=0; player.jumping=false; player.halo=0; G.running=true; loop();
+  }
+
+  async function share(){
+    const text = `Je joue à Savana Runner (Tchad) — Score ${G.score}. Essaie de battre mon record !`;
+    try{
+      if(navigator.share){ await navigator.share({title:document.title, text, url: location.href}); }
+      else { await navigator.clipboard.writeText(location.href); toast('Lien copié 📋'); }
+    }catch(e){ /* noop */ }
+  }
+
+  // --- SFX minimal ---
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const SOUND = { ctx: null, enabled: true };
+  function sfxBeep(freq=440, duration=0.07){
+    if(!SOUND.enabled) return;
+    try{
+      if(!SOUND.ctx) SOUND.ctx = new AudioCtx();
+      const t = SOUND.ctx.currentTime;
+      const o = SOUND.ctx.createOscillator();
+      const g = SOUND.ctx.createGain();
+      o.type='square'; o.frequency.value=freq;
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.2, t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+duration);
+      o.connect(g).connect(SOUND.ctx.destination);
+      o.start(t); o.stop(t+duration);
+    }catch(e){ /* ignore */ }
+  }
+
+  // --- Helpers ---
+  function rand(a,b){ return Math.random()*(b-a)+a }
+  function collides(a,b){ return !(a.x+a.w < b.x || a.x > b.x+b.w || a.y+a.h < b.y || a.y > b.y+b.h) }
+
+  // --- Spawners ---
+  function spawnObstacle(){
+    const type = Math.random()<0.6 ? 'camel' : 'storm';
+    const sizeK = type==='camel' ? rand(0.9,1.2) : rand(0.8,1.1);
+    const h = (type==='camel'? 42:36) * DPR * sizeK;
+    const w = (type==='camel'? 52:42) * DPR * sizeK;
+    G.obstacles.push({ type, x: W+20*DPR, y: G.ground - h, w, h, speed: G.speed })
+  }
+  function spawnItem(){
+    const w=24*DPR,h=24*DPR;
+    G.items.push({ type:'gourd', x: W+20*DPR, y: G.ground - h - rand(40*DPR, 110*DPR), w, h, speed: G.speed })
+  }
+
+  let nextObs = 0, nextItem = 50;
+
+  // --- Drawing primitives ---
+  function drawBackground(){
+    // ciel
+    const skyGrad = ctx.createLinearGradient(0,0,0,H);
+    skyGrad.addColorStop(0,'#a8e4ff');
+    skyGrad.addColorStop(0.6,'#f6e9b6');
+    ctx.fillStyle = skyGrad; ctx.fillRect(0,0,W,H);
+    // dunes
+    G.themeShift += G.speed*0.4;
+    ctx.fillStyle = '#f1dca7';
+    const y0 = G.ground + 6*DPR;
+    for(let i=0;i<3;i++){
+      const off = (G.themeShift/(2+i)) % W; 
+      ctx.beginPath();
+      ctx.moveTo(-off, y0 + i*10*DPR); 
+      for(let x=-off; x<=W+100*DPR; x+=40*DPR){
+        const y = y0 + Math.sin((x+off)/90*DPR + i)*12*DPR + i*8*DPR;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(W+100*DPR, H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+    }
+    // baobab silhouette (déco)
+    ctx.fillStyle = 'rgba(20,20,20,.12)';
+    for(let i=0;i<2;i++){
+      const bx = (W - (G.themeShift*0.5 + i*400*DPR) % (W+400*DPR));
+      drawBaobab(bx, G.ground - 120*DPR, 1.1);
+    }
+  }
+
+  function drawBaobab(x,y,scale){
+    ctx.save(); ctx.translate(x,y); ctx.scale(scale*DPR, scale*DPR);
+    ctx.fillRect(-8, 30, 16, 90); // tronc
+    ctx.beginPath(); ctx.arc(0,28,26,0,Math.PI*2); ctx.fill(); // houppier
+    ctx.restore();
+  }
+
+  function drawPlayer(){
+    // Corps
+    ctx.fillStyle = player.color;
+    roundRect(player.x, player.y, player.w, player.h, 6*DPR);
+    ctx.fill();
+    // Bandeau couleurs Tchad
+    ctx.fillStyle = '#092a87'; ctx.fillRect(player.x, player.y-6*DPR, player.w, 4*DPR);
+    ctx.fillStyle = '#ffcd00'; ctx.fillRect(player.x, player.y-10*DPR, player.w, 4*DPR);
+    ctx.fillStyle = '#c8102e'; ctx.fillRect(player.x, player.y-14*DPR, player.w, 4*DPR);
+    // Halo ramassage
+    if(player.halo>0){
+      ctx.strokeStyle = `rgba(255,205,0,${player.halo})`;
+      ctx.lineWidth = 6*DPR; 
+      ctx.beginPath(); ctx.arc(player.x+player.w/2, player.y+player.h/2, player.w*0.9, 0, Math.PI*2); ctx.stroke();
+      player.halo = Math.max(0, player.halo - 0.04);
+    }
+  }
+
+  function drawObstacle(o){
+    if(o.type==='camel'){
+      // dromadaire minimaliste
+      ctx.fillStyle = '#9b7e4b';
+      roundRect(o.x, o.y + o.h*0.4, o.w, o.h*0.6, 6*DPR); ctx.fill(); // corps
+      ctx.fillRect(o.x+o.w*0.75, o.y+o.h*0.1, o.w*0.18, o.h*0.3); // cou
+      roundRect(o.x+o.w*0.75, o.y-6*DPR, o.w*0.2, o.h*0.25, 4*DPR); ctx.fill(); // tête
+      // pattes
+      ctx.fillRect(o.x+o.w*0.15, o.y+o.h*0.6, 6*DPR, o.h*0.4);
+      ctx.fillRect(o.x+o.w*0.55, o.y+o.h*0.6, 6*DPR, o.h*0.4);
+    } else {
+      // tempête de sable
+      const grad = ctx.createLinearGradient(o.x, o.y, o.x, o.y+o.h);
+      grad.addColorStop(0,'#e9d8a6');
+      grad.addColorStop(1,'#c2b280');
+      ctx.fillStyle = grad;
+      roundRect(o.x, o.y, o.w, o.h, 8*DPR); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.28)';
+      for(let i=0;i<3;i++) ctx.fillRect(o.x+6*DPR+i*8*DPR, o.y+6*DPR+i*5*DPR, o.w*0.7, 3*DPR);
+    }
+  }
+
+  function drawItem(it){
+    // calebasse (gourd)
+    ctx.fillStyle = '#c08552';
+    roundRect(it.x, it.y, it.w, it.h, 12*DPR); ctx.fill();
+    ctx.fillStyle = '#5b3f22';
+    ctx.fillRect(it.x+it.w*0.45, it.y-6*DPR, it.w*0.1, 10*DPR); // tige
+  }
+
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y,   x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x,   y+h, r);
+    ctx.arcTo(x,   y+h, x,   y,   r);
+    ctx.arcTo(x,   y,   x+w, y,   r);
+    ctx.closePath();
+  }
+
+  // --- Loop ---
+  function update(){
+    G.time++;
+    // difficulty ramp
+    if(G.time % 300 === 0){ G.speed = Math.min(G.speed + 0.3, 10); $('#speed').textContent = G.speed.toFixed(1)+'x'; }
+
+    // player physics
+    player.vy += G.gravity;
+    player.y += player.vy;
+    if(player.y > G.ground){ player.y = G.ground; player.vy = 0; player.jumping=false; }
+
+    // spawn
+    if(nextObs-- <= 0){ spawnObstacle(); nextObs = Math.floor(rand(60, 120)); }
+    if(nextItem-- <= 0){ spawnItem(); nextItem = Math.floor(rand(80, 160)); }
+
+    // move & prune
+    const speedPx = G.speed * DPR * 1.8;
+    G.obstacles.forEach(o=>{ o.x -= speedPx });
+    G.items.forEach(it=>{ it.x -= speedPx });
+    G.obstacles = G.obstacles.filter(o=> o.x+o.w> -40*DPR);
+    G.items = G.items.filter(it=> it.x+it.w> -40*DPR);
+
+    // collisions
+    for(const o of G.obstacles){
+      if(collides({...player}, o)) return gameOver();
+    }
+    for(let i=G.items.length-1;i>=0;i--){
+      const it = G.items[i];
+      if(collides({...player}, it)){
+        G.items.splice(i,1);
+        G.score += 5;
+        $('#score').textContent = G.score;
+        player.halo = 0.9;
+        sfxBeep(880, 0.09)
+      }
+    }
+
+    // passive score
+    if(G.time % 20 === 0){ G.score++; $('#score').textContent = G.score; }
+  }
+
+  function render(){
+    drawBackground();
+    // ground line
+    ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth=2*DPR; ctx.beginPath();
+    ctx.moveTo(0, G.ground+0.5); ctx.lineTo(W, G.ground+0.5); ctx.stroke();
+
+    drawPlayer();
+    G.obstacles.forEach(drawObstacle);
+    G.items.forEach(drawItem);
+  }
+
+  function gameOver(){
+    sfxBeep(220, 0.2); sfxBeep(180, 0.2);
+    G.running = false;
+    G.best = Math.max(G.best, G.score);
+    localStorage.setItem('sr_best', String(G.best));
+    $('#best').textContent = G.best;
+    toast(i18n[LANG].gameover(G.score, G.best));
+  }
+
+  function loop(){
+    if(!G.running) return;
+    update();
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // Start
+  loop();
+
+})();
+</script>
+</body>
+</html>
